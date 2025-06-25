@@ -21,6 +21,45 @@
         }
     }
 
+
+function autoFillCategory(description) {
+    const keywordMap = {
+        'Transportation': ['uber', 'taxi', 'auto', 'bus', 'train', 'cab', 'ola', 'fuel'],
+        'Food': ['pizza', 'burger', 'restaurant', 'food', 'snacks', 'coffee', 'tea'],
+        'Entertainment': ['netflix', 'movie', 'cinema', 'game', 'concert', 'play', 'music'],
+        'Shopping': ['clothes', 'amazon', 'flipkart', 'mall', 'zara', 'purchase'],
+        'Bills': ['electricity', 'internet', 'bill', 'recharge', 'postpaid', 'rent'],
+        'Healthcare': ['doctor', 'medicine', 'hospital', 'clinic', 'tablet', 'checkup'],
+        'Other': []
+    };
+
+    const desc = description.toLowerCase();
+    for (const [category, keywords] of Object.entries(keywordMap)) {
+        if (keywords.some(kw => desc.includes(kw))) {
+            return category;
+        }
+    }
+    return '';
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    const descInput = document.getElementById('expenseDescription');
+    const categoryInput = document.getElementById('expenseCategory');
+    const hint = document.getElementById('suggestedCategoryHint');
+    descInput.addEventListener('blur', function () {
+        const suggested = autoFillCategory(this.value);
+        if (suggested && !categoryInput.value) {
+            categoryInput.value = suggested;
+            if (hint) {
+                hint.textContent = `Suggested: ${suggested}`;
+                hint.style.display = 'block';
+            }
+        } else if (hint) {
+            hint.style.display = 'none';
+        }
+    });
+});
+
 </script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js">
     function deleteTransactionFromHistory(id, type) {
@@ -467,7 +506,8 @@
                 <button class="tab-btn" onclick="showTab('budget')">Budget</button>
                 <button class="tab-btn" onclick="showTab('history')">History</button>
                 <button class="tab-btn" onclick="showTab('analytics')">Analytics</button>
-                <button class="tab-btn" onclick="showTab('categories')">Categories</button>
+                <button class="tab-btn" onclick="showTab('debt')">Debt Tracker</button>
+<button class="tab-btn" onclick="showTab('categories')">Categories</button>
             </nav>
         </div>
 
@@ -485,6 +525,10 @@
                 <div class="stat-card">
                     <h3>Monthly Expenses</h3>
                     <div class="amount" id="monthlyExpenses">₹0</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Net Debt</h3>
+                    <div class="amount" id="netDebt">₹0</div>
                 </div>
                 <div class="stat-card">
                     <h3>Savings</h3>
@@ -516,6 +560,7 @@
                 <div class="form-group">
                     <label for="expenseCategory">Category</label>
                     <select id="expenseCategory" class="form-control" required>
+<small id="suggestedCategoryHint" style="color: #999; display: none;"></small>
                         <option value="">Select Category</option>
                         <option value="Food">Food</option>
                         <option value="Transportation">Transportation</option>
@@ -683,7 +728,38 @@
             </div>
         </div>
 
-        <!-- Categories Tab -->
+        
+<!-- Debt Tracker Tab -->
+<div id="debt" class="tab-content">
+    <h2>Debt Tracker</h2>
+    <form id="debtForm">
+        <div class="form-group">
+            <label for="debtName">Debtor/Creditor</label>
+            <input type="text" id="debtName" class="form-control" required>
+        </div>
+        <div class="form-group">
+            <label for="debtAmount">Amount (₹)</label>
+            <input type="number" id="debtAmount" class="form-control" required step="0.01">
+        </div>
+        <div class="form-group">
+            <label for="debtDate">Date</label>
+            <input type="date" id="debtDate" class="form-control" required>
+        </div>
+        <div class="form-group">
+            <label for="debtType">Type</label>
+            <select id="debtType" class="form-control" required>
+                <option value="">Select Type</option>
+                <option value="owed">I Owe</option>
+                <option value="lent">Owed To Me</option>
+            </select>
+        </div>
+        <button type="submit" class="btn btn-primary">Add Debt</button>
+    </form>
+    <div id="debtList"></div>
+</div>
+
+
+<!-- Categories Tab -->
         <div id="categories" class="tab-content">
             <h2>Manage Categories</h2>
             
@@ -1790,6 +1866,68 @@ if ('serviceWorker' in navigator) {
     });
   });
 }
+
+let debts = JSON.parse(localStorage.getItem('debts')) || [];
+
+document.getElementById('debtForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const debt = {
+        id: Date.now(),
+        name: document.getElementById('debtName').value,
+        amount: parseFloat(document.getElementById('debtAmount').value),
+        date: document.getElementById('debtDate').value,
+        type: document.getElementById('debtType').value
+    };
+    debts.push(debt);
+    localStorage.setItem('debts', JSON.stringify(debts));
+    document.getElementById('debtForm').reset();
+    displayDebts();
+    updateDashboard();
+});
+
+function displayDebts() {
+    const debtList = document.getElementById('debtList');
+    if (!debtList) return;
+    debtList.innerHTML = '';
+    debts.forEach(debt => {
+        const div = document.createElement('div');
+        div.className = 'expense-item';
+        div.innerHTML = `
+            <div class="item-header">
+                <div><strong>${debt.name}</strong> <span class="item-amount">₹${debt.amount}</span></div>
+                <div>
+                    <button class="btn btn-danger" onclick="deleteDebt(${debt.id})">Delete</button>
+                </div>
+            </div>
+            <div class="item-details">
+                <div><strong>Type:</strong> ${debt.type === 'owed' ? 'I Owe' : 'Owed To Me'}</div>
+                <div><strong>Date:</strong> ${new Date(debt.date).toLocaleDateString('en-IN')}</div>
+            </div>
+        `;
+        debtList.appendChild(div);
+    });
+}
+
+function deleteDebt(id) {
+    debts = debts.filter(d => d.id !== id);
+    localStorage.setItem('debts', JSON.stringify(debts));
+    displayDebts();
+    updateDashboard();
+}
+
+const originalUpdateDashboard = updateDashboard;
+updateDashboard = function() {
+    originalUpdateDashboard();
+    const totalOwed = debts.filter(d => d.type === 'owed').reduce((sum, d) => sum + d.amount, 0);
+    const totalLent = debts.filter(d => d.type === 'lent').reduce((sum, d) => sum + d.amount, 0);
+    const netDebt = totalLent - totalOwed;
+    const netDebtDiv = document.getElementById('netDebt');
+    if (netDebtDiv) {
+        netDebtDiv.textContent = `₹${netDebt.toLocaleString('en-IN')}`;
+    }
+    displayDebts();
+};
+
 </script>
 
 </body>
